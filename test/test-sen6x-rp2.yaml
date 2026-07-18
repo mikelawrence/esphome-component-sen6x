@@ -9,10 +9,7 @@ rp2:
   board: rpipicow
 
 external_components:
-  source:
-    type: git
-    url: https://github.com/mikelawrence/esphome-component-sen6x
-    ref: ${ref}
+  - source: github://mikelawrence/esphome-component-sen6x@{ref}
 
 wifi:
   ssid: MyHomeNetwork
