@@ -658,6 +658,7 @@ void Sen6xComponent::loop() {
         this->loop_state_ = SetupStates::SM_SETUP_SET_VOCT;
         break;
       }
+      [[fallthrough]];
     }
     case SetupStates::SM_SETUP_SET_VOCT:
       ESP_LOGV(TAG, "SM_SETUP_SET_VOCT State, requested_delay=%" PRIu32 "ms, actual=%" PRIu32 "ms",
