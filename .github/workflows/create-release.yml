@@ -23,12 +23,12 @@ jobs:
 
       - name: Get calendar version
         id: calendar-version
-        uses: harm-matthias-harms/calendar-version@v3.0.2
+        uses: harm-matthias-harms/calendar-version@128aaa26d909aa8762904b3c87bff095617c1a0f  # v3.0.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: ${{ steps.calendar-version.outputs.new-version }}
           generate_release_notes: true
