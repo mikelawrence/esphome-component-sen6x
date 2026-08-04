@@ -32,9 +32,9 @@ sensor:
     i2c_id: i2c1_bus
     update_interval: 1s
     type: SEN69C
-    temperature_compensation:
-      offset: 0
-      normalized_offset_slope: 0
+    temperature_offset:
+      offset: -1.0
+      slope: -0.01
       time_constant: 0
     temperature_acceleration:
       t1: 100

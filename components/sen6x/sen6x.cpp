@@ -15,7 +15,7 @@ static const uint8_t CMD_FLAG_HEATER = 0x04;
 static const uint8_t CMD_FLAG_CO2_RECAL = 0x08;
 static const uint8_t CMD_FLAG_CO2_PRESS = 0x10;
 static const uint8_t CMD_FLAG_FAN_CLEAN = 0x20;
-static const uint8_t CMD_FLAG_TEMP_COMP = 0x40;
+static const uint8_t CMD_FLAG_TEMP_OFFSET = 0x40;
 static const uint8_t CMD_FLAG_VOC_CHECK = 0x80;
 
 static const uint16_t SEN62_CMD_READ_MEASUREMENT = 0x04A3;
@@ -121,8 +121,8 @@ void Sen6xComponent::loop() {
       this->loop_state_ = SetupStates::SM_CO2_PRESS_INIT;
     } else if (this->command_flag_ & CMD_FLAG_FAN_CLEAN) {
       this->loop_state_ = SetupStates::SM_FAN_INIT;
-    } else if (this->command_flag_ & CMD_FLAG_TEMP_COMP) {
-      this->loop_state_ = SetupStates::SM_TEMP_COMP_INIT;
+    } else if (this->command_flag_ & CMD_FLAG_TEMP_OFFSET) {
+      this->loop_state_ = SetupStates::SM_TEMP_OFFSET_INIT;
     } else if (this->command_flag_ & CMD_FLAG_VOC_CHECK) {
       this->loop_state_ = SetupStates::SM_VOC_CHECK_INIT;
     } else if (this->command_flag_ & CMD_FLAG_SETUP) {
@@ -440,24 +440,26 @@ void Sen6xComponent::loop() {
       this->loop_state_ = SetupStates::SM_IDLE;
       ESP_LOGD(TAG, "Fan Cleaning: Complete");
       break;
-    case SetupStates::SM_TEMP_COMP_INIT:
-      ESP_LOGV(TAG, "SM_TEMP_COMP_INIT State, requested_delay=%" PRIu32 "ms, actual=%" PRIu32 "ms",
+    case SetupStates::SM_TEMP_OFFSET_INIT:
+      ESP_LOGV(TAG, "SM_TEMP_OFFSET_INIT State, requested_delay=%" PRIu32 "ms, actual=%" PRIu32 "ms",
                this->state_wait_time_, App.get_loop_component_start_time() - this->state_time_);
-      if (!this->write_temperature_compensation_(this->temperature_compensation_.value())) {
-        ESP_LOGE(TAG, "Set Temperature Compensation failed");
+      if (this->temperature_offset_[this->slot_store_].has_value()) {
+        if (!this->write_temperature_offset_(this->temperature_offset_[this->slot_store_].value())) {
+          ESP_LOGE(TAG, "Set Temperature Compensation failed");
+        }
       }
       this->state_wait_time_ = 20;
-      this->loop_state_ = SetupStates::SM_TEMP_COMP_DONE;
+      this->loop_state_ = SetupStates::SM_TEMP_OFFSET_DONE;
       break;
-    case SetupStates::SM_TEMP_COMP_DONE:
+    case SetupStates::SM_TEMP_OFFSET_DONE:
       ESP_LOGD(TAG,
-               "Temperature Compensation: Updated offset=%.3f, normalized_offset_slope=%.6f, time_constant=%" PRIu16
-               ", "
+               "Temperature Compensation: Updated offset=%.3f, slope=%.6f, time_constant=%" PRIu16 ", "
                "slot=%" PRIu8,
-               static_cast<float>(this->temperature_compensation_.value().offset) / 200.0,
-               static_cast<float>(this->temperature_compensation_.value().normalized_offset_slope) / 10000.0,
-               this->temperature_compensation_.value().time_constant, this->temperature_compensation_.value().slot);
-      this->command_flag_ &= ~CMD_FLAG_TEMP_COMP;
+               static_cast<float>(this->temperature_offset_[this->slot_store_].value().offset) / 200.0,
+               static_cast<float>(this->temperature_offset_[this->slot_store_].value().slope) / 10000.0,
+               this->temperature_offset_[this->slot_store_].value().time_constant,
+               this->temperature_offset_[this->slot_store_].value().slot);
+      this->command_flag_ &= ~CMD_FLAG_TEMP_OFFSET;
       this->loop_state_ = SetupStates::SM_IDLE;
       break;
     case SetupStates::SM_VOC_CHECK_INIT: {
@@ -531,21 +533,21 @@ void Sen6xComponent::loop() {
         ESP_LOGV(TAG, "Set Temperature Acceleration: T1: %.1f T2: %.1f K: %.1f P: %.1f", accel.t1 / 10.0,
                  accel.t2 / 10.0, accel.k / 10.0, accel.p / 10.0);
       }
-      this->loop_state_ = SetupStates::SM_SETUP_SET_TC;
+      this->loop_state_ = SetupStates::SM_SETUP_SET_TO;
       break;
-    case SetupStates::SM_SETUP_SET_TC:
-      ESP_LOGV(TAG, "SM_SETUP_SET_TC State, requested_delay=%" PRIu32 "ms, actual=%" PRIu32 "ms",
+    case SetupStates::SM_SETUP_SET_TO:
+      ESP_LOGV(TAG, "SM_SETUP_SET_TO State, requested_delay=%" PRIu32 "ms, actual=%" PRIu32 "ms",
                this->state_wait_time_, App.get_loop_component_start_time() - this->state_time_);
-      if (this->temperature_compensation_.has_value()) {
-        auto &comp = this->temperature_compensation_.value();
-        if (!this->write_temperature_compensation_(comp)) {
+      if (this->temperature_offset_[0].has_value()) {
+        auto &comp = this->temperature_offset_[0].value();
+        if (!this->write_temperature_offset_(comp)) {
           this->mark_failed(LOG_STR("Set Temperature Compensation failed"));
           return;
         }
         ESP_LOGV(TAG,
                  "Set Temperature Compensation: Offset: %.3f Normalized Offset Slope: %.6f "
                  "    Time Constant: %" PRIu16,
-                 comp.offset / 200.0, comp.normalized_offset_slope / 10000.0, comp.time_constant);
+                 comp.offset / 200.0, comp.slope / 10000.0, comp.time_constant);
       }
       this->loop_state_ = SetupStates::SM_SETUP_GET_SN;
       break;
@@ -753,23 +755,35 @@ void Sen6xComponent::dump_config() {
                 "  Firmware version: %" PRIu8 ".%" PRIu8,
                 TRUEFALSE(this->is_initialized()), LOG_STR_ARG(type_to_string(this->type_.value())),
                 this->update_interval_, this->serial_number_, this->firmware_major_, this->firmware_minor_);
-  if (this->temperature_compensation_.has_value()) {
-    TemperatureCompensation comp = this->temperature_compensation_.value();
-    ESP_LOGCONFIG(TAG,
-                  "  Temperature Compensation:\n"
-                  "    Offset (°C): %.3f\n"
-                  "    Normalized Offset Slope: %.6f\n"
-                  "    Time Constant (seconds): %" PRIu16,
-                  comp.offset / 200.0, comp.normalized_offset_slope / 10000.0, comp.time_constant);
+
+  TemperatureOffset offset[NUM_TC_SLOTS];
+  for (uint8_t i = 0; i < NUM_TC_SLOTS; i++) {
+    if (this->temperature_offset_[i].has_value()) {
+      offset[i] = this->temperature_offset_[i].value();
+    } else {
+      offset[i] = {0, 0, 0, i};
+    }
   }
+  ESP_LOGCONFIG(TAG,
+                "  Temperature Offset\n"
+                "    Slot Offset   Slope  Time Constant\n"
+                "    0    %-8.3f %-6.3f %" PRIu16 "\n"
+                "    1    %-8.3f %-6.3f %" PRIu16 "\n"
+                "    2    %-8.3f %-6.3f %" PRIu16 "\n"
+                "    3    %-8.3f %-6.3f %" PRIu16 "\n"
+                "    4    %-8.3f %-6.3f %" PRIu16,
+                offset[0].offset / 200.0, offset[0].slope / 10000.0, offset[0].time_constant, offset[1].offset / 200.0,
+                offset[1].slope / 10000.0, offset[1].time_constant, offset[2].offset / 200.0, offset[2].slope / 10000.0,
+                offset[2].time_constant, offset[3].offset / 200.0, offset[3].slope / 10000.0, offset[3].time_constant,
+                offset[4].offset / 200.0, offset[4].slope / 10000.0, offset[4].time_constant);
   if (this->temperature_acceleration_.has_value()) {
     TemperatureAcceleration accel = this->temperature_acceleration_.value();
     ESP_LOGCONFIG(TAG,
                   "  Temperature Acceleration:\n"
-                  "    T1 (seconds): %.1f\n"
-                  "    T2 (seconds): %.1f\n"
-                  "    K: %.1f\n"
-                  "    P: %.1f",
+                  "    Time Constant T1: %.1f\n"
+                  "    Time Constant T2: %.1f\n"
+                  "    Filter Constant K: %.1f\n"
+                  "    Filter Constant P: %.1f",
                   accel.t1 / 10.0, accel.t2 / 10.0, accel.k / 10.0, accel.p / 10.0);
   }
   LOG_SENSOR("  ", "PM  1.0", this->pm_1_0_sensor_);
@@ -878,12 +892,12 @@ bool Sen6xComponent::write_tuning_parameters_(uint16_t i2c_command, const GasTun
   return this->write_command(i2c_command, params, 6);
 }
 
-bool Sen6xComponent::write_temperature_compensation_(const TemperatureCompensation &compensation) {
+bool Sen6xComponent::write_temperature_offset_(const TemperatureOffset &compensation) {
   uint16_t params[4];
   params[0] = static_cast<uint16_t>(compensation.offset);
-  params[1] = static_cast<uint16_t>(compensation.normalized_offset_slope);
+  params[1] = static_cast<uint16_t>(compensation.slope);
   params[2] = compensation.time_constant;
-  params[3] = compensation.slot;
+  params[3] = static_cast<uint16_t>(compensation.slot);
   return this->write_command(CMD_TEMPERATURE_COMPENSATION, params, 4);
 }
 
@@ -953,7 +967,19 @@ bool Sen6xComponent::perform_forced_co2_recalibration(uint16_t co2) {
   return true;
 }
 
+bool Sen6xComponent::set_ambient_pressure(uint16_t pressure_in_hpa) {
+  if (this->co2_sensor_ == nullptr) {
+    ESP_LOGE(TAG, "CO₂ sensor does not exist");
+    return false;
+  }
+  this->ambient_pressure_ = pressure_in_hpa;
+  this->command_flag_ |= CMD_FLAG_CO2_PRESS;
+  return true;
+}
+
 bool Sen6xComponent::set_ambient_pressure_compensation(uint16_t pressure_in_hpa) {
+  ESP_LOGW(TAG, "set_ambient_pressure_compensation() is deprecated and will be removed January 2027; use "
+                "set_ambient_pressure() instead");
   if (this->co2_sensor_ == nullptr) {
     ESP_LOGE(TAG, "CO₂ sensor does not exist");
     return false;
@@ -968,11 +994,22 @@ bool Sen6xComponent::start_fan_cleaning() {
   return true;
 }
 
-bool Sen6xComponent::set_temperature_compensation(float offset, float normalized_offset_slope, uint16_t time_constant,
-                                                  uint8_t slot) {
-  TemperatureCompensation comp(offset, normalized_offset_slope, time_constant, slot);
-  this->temperature_compensation_ = comp;
-  this->command_flag_ |= CMD_FLAG_TEMP_COMP;
+bool Sen6xComponent::set_temperature_offset(float offset, float slope, uint16_t time_constant, uint8_t slot) {
+  TemperatureOffset comp(offset, slope, time_constant, slot);
+  this->temperature_offset_[slot] = comp;
+  this->slot_store_ = slot;
+  this->command_flag_ |= CMD_FLAG_TEMP_OFFSET;
+  return true;
+}
+
+// Deprecated: Remove January 2027.
+bool Sen6xComponent::set_temperature_compensation(float offset, float slope, uint16_t time_constant, uint8_t slot) {
+  ESP_LOGW(TAG, "set_temperature_compensation() is deprecated and will be removed January 2027; use "
+                "set_temperature_offset() instead");
+  TemperatureOffset comp(offset, slope, time_constant, slot);
+  this->temperature_offset_[slot] = comp;
+  this->slot_store_ = slot;
+  this->command_flag_ |= CMD_FLAG_TEMP_OFFSET;
   return true;
 }
 

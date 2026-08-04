@@ -1,3 +1,5 @@
+import logging
+
 from esphome import automation
 from esphome.automation import maybe_simple_id
 import esphome.codegen as cg
@@ -16,7 +18,6 @@ from esphome.const import (
     CONF_INDEX_OFFSET,
     CONF_LEARNING_TIME_GAIN_HOURS,
     CONF_LEARNING_TIME_OFFSET_HOURS,
-    CONF_NORMALIZED_OFFSET_SLOPE,
     CONF_NOX,
     CONF_OFFSET,
     CONF_PM_1_0,
@@ -25,7 +26,7 @@ from esphome.const import (
     CONF_PM_10_0,
     CONF_STD_INITIAL,
     CONF_TEMPERATURE,
-    CONF_TEMPERATURE_COMPENSATION,
+    CONF_TEMPERATURE_OFFSET,
     CONF_TIME_CONSTANT,
     CONF_TYPE,
     CONF_VALUE,
@@ -50,9 +51,13 @@ from esphome.const import (
     UNIT_PERCENT,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 CODEOWNERS = ["@mikelawrence"]
 DEPENDENCIES = ["i2c"]
 AUTO_LOAD = ["sensirion_common"]
+
+MIN_ESPHOME_VERSION = (2026, 4, 0)
 
 sen6x_ns = cg.esphome_ns.namespace("sen6x")
 Sen6xComponent = sen6x_ns.class_(
@@ -66,10 +71,23 @@ CONF_K = "k"
 CONF_HCHO = "hcho"
 ICON_MOLECULE = "mdi:molecule"
 CONF_P = "p"
+CONF_SLOPE = "slope"
 CONF_SLOT = "slot"
 CONF_T1 = "t1"
 CONF_T2 = "t2"
 CONF_TEMPERATURE_ACCELERATION = "temperature_acceleration"
+
+# Deprecated config variables: Remove January 2027.
+CONF_DEPRECATED_TEMPERATURE_COMPENSATION = "temperature_compensation"
+CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE = "normalized_offset_slope"
+
+# Deprecated action names. Remove January 2027.
+ACTION_SET_TEMPERATURE_OFFSET = "sen6x.set_temperature_offset"
+ACTION_DEPRECATED_SET_TEMPERATURE_COMPENSATION = "sen6x.set_temperature_compensation"
+ACTION_SET_AMBIENT_PRESSURE = "sen6x.set_ambient_pressure"
+ACTION_DEPRECATED_SET_AMBIENT_PRESSURE_COMPENSATION = (
+    "sen6x.set_ambient_pressure_compensation"
+)
 
 # Actions
 StartFanCleaningAction = sen6x_ns.class_("StartFanCleaningAction", automation.Action)
@@ -77,11 +95,19 @@ ActivateHeaterAction = sen6x_ns.class_("ActivateHeaterAction", automation.Action
 PerformForcedCo2RecalibrationAction = sen6x_ns.class_(
     "PerformForcedCo2RecalibrationAction", automation.Action
 )
-SetAmbientPressureCompensationAction = sen6x_ns.class_(
-    "SetAmbientPressureCompensationAction", automation.Action
+# Deprecated: Remove January 2027.
+SetAmbientPressureCompensationDeprecatedAction = sen6x_ns.class_(
+    "SetAmbientPressureCompensationDeprecatedAction", automation.Action
 )
-SetTemperatureCompensationAction = sen6x_ns.class_(
-    "SetTemperatureCompensationAction", automation.Action
+SetAmbientPressureAction = sen6x_ns.class_(
+    "SetAmbientPressureAction", automation.Action
+)
+# Deprecated: Remove January 2027.
+SetTemperatureCompensationDeprecatedAction = sen6x_ns.class_(
+    "SetTemperatureCompensationDeprecatedAction", automation.Action
+)
+SetTemperatureOffsetAction = sen6x_ns.class_(
+    "SetTemperatureOffsetAction", automation.Action
 )
 
 SEN62 = "SEN62"
@@ -99,6 +125,45 @@ SEN6X_TYPES = {
     SEN68: Sen6xType.SEN68,
     SEN69C: Sen6xType.SEN69C,
 }
+
+
+def _deprecated_action(old_name: str, new_name: str):
+    """Return a validator that warns when a renamed action is used."""
+
+    def validator(config):
+        _LOGGER.warning(
+            "The '%s' action is deprecated and will be removed in January 2027; "
+            "use '%s' instead.",
+            old_name,
+            new_name,
+        )
+        return config
+
+    return validator
+
+
+def deprecated_action_schema(schema, old_name: str, new_name: str):
+    """Wrap an action schema so deprecated action usage logs a config warning."""
+    return cv.All(schema, _deprecated_action(old_name, new_name))
+
+
+def _deprecated_key(old_name: str, new_name: str):
+    """Return a validator that warns when a renamed configuration key is used.
+
+    Must run *before* cv.rename_key(), while the old key is still present.
+    """
+
+    def validator(config):
+        if old_name in config:
+            _LOGGER.warning(
+                "The '%s' configuration option is deprecated and will be removed in "
+                "January 2027; use '%s' instead.",
+                old_name,
+                new_name,
+            )
+        return config
+
+    return validator
 
 
 def _gas_sensor(
@@ -190,14 +255,19 @@ BASE_SCHEMA = (
                 device_class=DEVICE_CLASS_HUMIDITY,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
-            cv.Optional(CONF_TEMPERATURE_COMPENSATION): cv.Schema(
-                {
-                    cv.Required(CONF_OFFSET): cv.float_range(min=-100.0, max=100.0),
-                    cv.Required(CONF_NORMALIZED_OFFSET_SLOPE): cv.float_range(
-                        min=-3.2768, max=3.2767
-                    ),
-                    cv.Required(CONF_TIME_CONSTANT): cv.int_range(min=0, max=65565),
-                }
+            cv.Optional(CONF_TEMPERATURE_OFFSET): cv.All(
+                _deprecated_key(
+                    CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE,
+                    CONF_SLOPE,
+                ),
+                cv.rename_key(CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE, CONF_SLOPE),
+                cv.Schema(
+                    {
+                        cv.Required(CONF_OFFSET): cv.float_range(min=-100.0, max=100.0),
+                        cv.Required(CONF_SLOPE): cv.float_range(min=-3.2768, max=3.2767),
+                        cv.Required(CONF_TIME_CONSTANT): cv.int_range(min=0, max=65565),
+                    }
+                ),
             ),
             cv.Optional(CONF_TEMPERATURE_ACCELERATION): cv.Schema(
                 {
@@ -288,7 +358,13 @@ HCHO_SCHEMA = cv.Schema(
 
 SEN65_SCHEMA = BASE_SCHEMA.extend(VOC_SCHEMA).extend(NOX_SCHEMA)
 
-CONFIG_SCHEMA = cv.Schema(
+CONFIG_SCHEMA = cv.All(
+    cv.require_esphome_version(*MIN_ESPHOME_VERSION),
+    _deprecated_key(
+        CONF_DEPRECATED_TEMPERATURE_COMPENSATION,
+        CONF_TEMPERATURE_OFFSET,
+    ),
+    cv.rename_key(CONF_DEPRECATED_TEMPERATURE_COMPENSATION, CONF_TEMPERATURE_OFFSET),
     cv.typed_schema(
         {
             SEN62: BASE_SCHEMA,
@@ -345,10 +421,12 @@ async def to_code(config):
     await cg.register_component(var, config)
     await i2c.register_i2c_device(var, config)
     cg.add(var.set_type(SEN6X_TYPES[config[CONF_TYPE]]))
-    for key, funcName in SENSOR_MAP.items():
+
+    for key, func_name in SENSOR_MAP.items():
         if cfg := config.get(key):
             sens = await sensor.new_sensor(cfg)
-            cg.add(getattr(var, funcName)(sens))
+            cg.add(getattr(var, func_name)(sens))
+
     if cfg := config.get(CONF_VOC):
         if tuning := cfg.get(CONF_ALGORITHM_TUNING):
             cg.add(
@@ -366,11 +444,12 @@ async def to_code(config):
         if source := cfg.get(CONF_ALGORITHM_STATE_TIME_SOURCE):
             if CONF_ALGORITHM_STATE_RECOVERY not in cfg:
                 raise cv.Invalid(
-                    f"If '{CONF_ALGORITHM_STATE_TIME_SOURCE}' is defined, '{CONF_ALGORITHM_STATE_RECOVERY}' must also be defined"
+                    f"If '{CONF_ALGORITHM_STATE_TIME_SOURCE}' is defined, "
+                    f"'{CONF_ALGORITHM_STATE_RECOVERY}' must also be defined"
                 )
-
             time_ = await cg.get_variable(source)
             cg.add(var.set_time_source(time_))
+
     if cfg := config.get(CONF_NOX, {}).get(CONF_ALGORITHM_TUNING):
         cg.add(
             var.set_nox_algorithm_tuning(
@@ -380,14 +459,16 @@ async def to_code(config):
                 cfg[CONF_GAIN_FACTOR],
             )
         )
-    if cfg := config.get(CONF_TEMPERATURE_COMPENSATION):
+
+    if cfg := config.get(CONF_TEMPERATURE_OFFSET):
         cg.add(
-            var.set_temperature_compensation(
+            var.set_temperature_offset(
                 cfg[CONF_OFFSET],
-                cfg[CONF_NORMALIZED_OFFSET_SLOPE],
+                cfg[CONF_SLOPE],
                 cfg[CONF_TIME_CONSTANT],
             )
         )
+
     if cfg := config.get(CONF_TEMPERATURE_ACCELERATION):
         cg.add(
             var.set_temperature_acceleration(
@@ -397,13 +478,14 @@ async def to_code(config):
                 cfg[CONF_T2],
             )
         )
+
     if cfg := config.get(CONF_CO2):
-        for key, funcName in CO2_SETTING_MAP.items():
+        for key, func_name in CO2_SETTING_MAP.items():
             if setting := cfg.get(key):
-                cg.add(getattr(var, funcName)(setting))
+                cg.add(getattr(var, func_name)(setting))
         if source := cfg.get(CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE):
             press = await cg.get_variable(source)
-            cg.add(var.set_ambient_pressure_compensation_source(press))
+            cg.add(var.set_ambient_pressure_source(press))
 
 
 SEN6X_ACTION_SCHEMA = maybe_simple_id({cv.GenerateID(): cv.use_id(Sen6xComponent)})
@@ -434,6 +516,12 @@ SEN6X_VALUE_ACTION_SCHEMA = maybe_simple_id(
     }
 )
 
+SEN6X_DEPRECATED_AMBIENT_PRESSURE_COMPENSATION_SCHEMA = deprecated_action_schema(
+    SEN6X_VALUE_ACTION_SCHEMA,
+    ACTION_DEPRECATED_SET_AMBIENT_PRESSURE_COMPENSATION,
+    ACTION_SET_AMBIENT_PRESSURE,
+)
+
 
 @automation.register_action(
     "sen6x.perform_forced_co2_recalibration",
@@ -442,9 +530,15 @@ SEN6X_VALUE_ACTION_SCHEMA = maybe_simple_id(
     synchronous=False,
 )
 @automation.register_action(
-    "sen6x.set_ambient_pressure_compensation",
-    SetAmbientPressureCompensationAction,
+    ACTION_SET_AMBIENT_PRESSURE,
+    SetAmbientPressureAction,
     SEN6X_VALUE_ACTION_SCHEMA,
+    synchronous=False,
+)
+@automation.register_action(
+    ACTION_DEPRECATED_SET_AMBIENT_PRESSURE_COMPENSATION,
+    SetAmbientPressureCompensationDeprecatedAction,
+    SEN6X_DEPRECATED_AMBIENT_PRESSURE_COMPENSATION_SCHEMA,
     synchronous=False,
 )
 async def sen6x_uint16_to_code(config, action_id, template_arg, args):
@@ -455,14 +549,62 @@ async def sen6x_uint16_to_code(config, action_id, template_arg, args):
     return var
 
 
-SEN6X_TEMPERATURE_COMPENSATION_SCHEMA = cv.Schema(
+SEN6X_DEPRECATED_TEMPERATURE_COMPENSATION_SCHEMA = deprecated_action_schema(
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.use_id(Sen6xComponent),
+            cv.Optional(CONF_OFFSET, default=0.0): cv.templatable(
+                cv.float_range(min=-100.0, max=100.0)
+            ),
+            cv.Optional(
+                CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE, default=0.0
+            ): cv.templatable(
+                cv.float_range(min=-3.2768, max=3.2767)
+            ),
+            cv.Optional(CONF_TIME_CONSTANT, default=0): cv.templatable(
+                cv.int_range(min=0, max=65535),
+            ),
+            cv.Optional(CONF_SLOT, default=0): cv.templatable(cv.int_range(0, 4)),
+        }
+    ),
+    ACTION_DEPRECATED_SET_TEMPERATURE_COMPENSATION,
+    ACTION_SET_TEMPERATURE_OFFSET,
+)
+
+
+@automation.register_action(
+    ACTION_DEPRECATED_SET_TEMPERATURE_COMPENSATION,
+    SetTemperatureCompensationDeprecatedAction,
+    SEN6X_DEPRECATED_TEMPERATURE_COMPENSATION_SCHEMA,
+    synchronous=False,
+)
+async def sen6x_stc_to_code(config, action_id, template_arg, args):
+    var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(var, config[CONF_ID])
+
+    if cfg := config.get(CONF_OFFSET):
+        template = await cg.templatable(cfg, args, cg.float_)
+        cg.add(var.set_offset(template))
+    if cfg := config.get(CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE):
+        template = await cg.templatable(cfg, args, cg.float_)
+        cg.add(var.set_slope(template))
+    if cfg := config.get(CONF_TIME_CONSTANT):
+        template = await cg.templatable(cfg, args, cg.uint16)
+        cg.add(var.set_time_constant(template))
+    if cfg := config.get(CONF_SLOT):
+        template = await cg.templatable(cfg, args, cg.uint8)
+        cg.add(var.set_slot(template))
+    return var
+
+
+SEN6X_TEMPERATURE_OFFSET_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.use_id(Sen6xComponent),
         cv.Optional(CONF_OFFSET, default=0.0): cv.templatable(
             cv.float_range(min=-100.0, max=100.0)
         ),
-        cv.Optional(CONF_NORMALIZED_OFFSET_SLOPE, default=0.0): cv.templatable(
-            cv.float_range(min=-3.0000, max=3.0000)
+        cv.Optional(CONF_SLOPE, default=0.0): cv.templatable(
+            cv.float_range(min=-3.2768, max=3.2767)
         ),
         cv.Optional(CONF_TIME_CONSTANT, default=0): cv.templatable(
             cv.int_range(min=0, max=65535),
@@ -473,20 +615,21 @@ SEN6X_TEMPERATURE_COMPENSATION_SCHEMA = cv.Schema(
 
 
 @automation.register_action(
-    "sen6x.set_temperature_compensation",
-    SetTemperatureCompensationAction,
-    SEN6X_TEMPERATURE_COMPENSATION_SCHEMA,
+    ACTION_SET_TEMPERATURE_OFFSET,
+    SetTemperatureOffsetAction,
+    SEN6X_TEMPERATURE_OFFSET_SCHEMA,
     synchronous=False,
 )
-async def sen6x_stc_to_code(config, action_id, template_arg, args):
+async def sen6x_sto_to_code(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
+
     if cfg := config.get(CONF_OFFSET):
         template = await cg.templatable(cfg, args, cg.float_)
         cg.add(var.set_offset(template))
-    if cfg := config.get(CONF_NORMALIZED_OFFSET_SLOPE):
+    if cfg := config.get(CONF_SLOPE):
         template = await cg.templatable(cfg, args, cg.float_)
-        cg.add(var.set_normalized_offset_slope(template))
+        cg.add(var.set_slope(template))
     if cfg := config.get(CONF_TIME_CONSTANT):
         template = await cg.templatable(cfg, args, cg.uint16)
         cg.add(var.set_time_constant(template))

@@ -33,15 +33,15 @@ enum class SetupStates : uint8_t {
   SM_FAN_ON,
   SM_FAN_START,
   SM_FAN_DONE,
-  SM_TEMP_COMP_INIT,
-  SM_TEMP_COMP_DONE,
+  SM_TEMP_OFFSET_INIT,
+  SM_TEMP_OFFSET_DONE,
   SM_VOC_CHECK_INIT,
   SM_VOC_CHECK_DONE,
   SM_SETUP_INIT,
   SM_SETUP_INIT_WAIT,
   SM_SETUP_GET_STATUS,
   SM_SETUP_SET_ACCEL,
-  SM_SETUP_SET_TC,
+  SM_SETUP_SET_TO,
   SM_SETUP_GET_SN,
   SM_SETUP_GET_SN_1,
   SM_SETUP_GET_PN,
@@ -58,6 +58,13 @@ enum class SetupStates : uint8_t {
 enum class Sen6xType : uint8_t { SEN62, SEN63C, SEN65, SEN66, SEN68, SEN69C };
 enum class Sen6xVocStatus : uint8_t { NOTHING, WAITING, RESTORED, RESTORED_TIME, UPDATED, NO_PREF, TOO_OLD, ERROR };
 
+// Time interval of 2 hours (in milliseconds) for storing algorithm state
+static const uint32_t ALGORITHM_STATE_STORE_INTERVAL_MS = 2 * 60 * 60 * 1000;
+// Time interval of 2 hours 15 minutes (in seconds) for max age of algorithm state
+static const time_t ALGORITHM_STATE_MAX_AGE = 2 * 60 * 60 + 15 * 60;
+// Number for temperature compensation slots
+static const uint8_t NUM_TC_SLOTS = 5;
+
 struct Sen6xVocBaseline {
   uint16_t state[4];  // algorithm state is actually uint8_t[8] but uint16_t[4] is the transaction format
   time_t epoch;       // Used to determine age of algorithm state
@@ -72,18 +79,18 @@ struct GasTuning {
   uint16_t gain_factor;
 };
 
-struct TemperatureCompensation {
+struct TemperatureOffset {
   int16_t offset;
-  int16_t normalized_offset_slope;
+  int16_t slope;
   uint16_t time_constant;
-  uint8_t slot;
+  uint16_t slot;
 
-  TemperatureCompensation() : offset(0), normalized_offset_slope(0), time_constant(0), slot(0) {}
-  TemperatureCompensation(float offset, float normalized_offset_slope, uint16_t time_constant, uint8_t slot = 0) {
+  TemperatureOffset() : offset(0), slope(0), time_constant(0), slot(0) {}
+  TemperatureOffset(float offset, float slope, uint16_t time_constant, uint16_t slot = 0) {
     this->offset = static_cast<int16_t>(offset * 200.0);
-    this->normalized_offset_slope = static_cast<int16_t>(normalized_offset_slope * 10000.0);
+    this->slope = static_cast<int16_t>(slope * 10000.0);
     this->time_constant = time_constant;
-    this->slot = slot;
+    this->slot = std::clamp(slot, static_cast<uint16_t>(0), static_cast<uint16_t>(NUM_TC_SLOTS - 1));
   }
 };
 
@@ -100,11 +107,6 @@ struct TemperatureAcceleration {
     this->t2 = static_cast<uint16_t>(t2 * 10.0);
   }
 };
-
-// Time interval of 2 hours (in milliseconds) for storing algorithm state
-static const uint32_t ALGORITHM_STATE_STORE_INTERVAL_MS = 2 * 60 * 60 * 1000;
-// Time interval of 2 hours 15 minutes (in seconds) for max age of algorithm state
-static const time_t ALGORITHM_STATE_MAX_AGE = 2 * 60 * 60 + 15 * 60;
 
 class Sen6xComponent : public PollingComponent, public sensirion_common::SensirionI2CDevice {
   SUB_SENSOR(pm_1_0)
@@ -151,18 +153,19 @@ class Sen6xComponent : public PollingComponent, public sensirion_common::Sensiri
     tuning_params.gain_factor = gain_factor;
     this->nox_tuning_params_ = tuning_params;
   }
-  bool set_temperature_compensation(float offset, float normalized_offset_slope, uint16_t time_constant,
-                                    uint8_t slot = 0);
+  // Deprecated: Remove January 2027.
+  bool set_temperature_compensation(float offset, float slope, uint16_t time_constant, uint8_t slot = 0);
+  bool set_temperature_offset(float offset, float slope, uint16_t time_constant, uint8_t slot = 0);
   void set_temperature_acceleration(float k, float p, float t1, float t2) {
     TemperatureAcceleration accel(k, p, t1, t2);
     this->temperature_acceleration_ = accel;
   }
   void set_automatic_self_calibration(bool value) { this->auto_self_calibration_ = value; }
   void set_altitude_compensation(uint16_t altitude) { this->altitude_compensation_ = altitude; }
-  void set_ambient_pressure_compensation_source(sensor::Sensor *pressure) {
-    this->ambient_pressure_compensation_source_ = pressure;
-  }
+  void set_ambient_pressure_source(sensor::Sensor *pressure) { this->ambient_pressure_compensation_source_ = pressure; }
+  // Deprecated: Remove January 2027.
   bool set_ambient_pressure_compensation(uint16_t pressure_in_hpa);
+  bool set_ambient_pressure(uint16_t pressure_in_hpa);
   void set_time_source(time::RealTimeClock *time) { this->time_source_ = time; }
   bool start_fan_cleaning();
   bool activate_heater();
@@ -175,7 +178,7 @@ class Sen6xComponent : public PollingComponent, public sensirion_common::Sensiri
   bool start_measurements_();
   bool stop_measurements_();
   bool write_tuning_parameters_(uint16_t i2c_command, const GasTuning &tuning);
-  bool write_temperature_compensation_(const TemperatureCompensation &compensation);
+  bool write_temperature_offset_(const TemperatureOffset &compensation);
   bool write_temperature_acceleration_();
   bool write_ambient_pressure_compensation_(uint16_t pressure_in_hpa);
 
@@ -189,6 +192,7 @@ class Sen6xComponent : public PollingComponent, public sensirion_common::Sensiri
   uint32_t state_wait_time_{0};
   uint16_t ambient_pressure_compensation_{0};
   uint16_t co2_reference_{0};
+  uint16_t slot_store_{0};
   uint16_t ambient_pressure_{0};
   uint16_t measurement_cmd_;
   uint8_t measurement_cmd_len_;
@@ -202,7 +206,7 @@ class Sen6xComponent : public PollingComponent, public sensirion_common::Sensiri
   optional<Sen6xType> type_;
   optional<GasTuning> voc_tuning_params_;
   optional<GasTuning> nox_tuning_params_;
-  optional<TemperatureCompensation> temperature_compensation_;
+  optional<TemperatureOffset> temperature_offset_[NUM_TC_SLOTS];
   optional<TemperatureAcceleration> temperature_acceleration_;
   optional<bool> auto_self_calibration_;
   optional<uint16_t> altitude_compensation_;
@@ -211,5 +215,4 @@ class Sen6xComponent : public PollingComponent, public sensirion_common::Sensiri
   ESPPreferenceObject pref_;
 };
 
-}  // namespace esphome::ld2410s
-
+}  // namespace esphome::sen6x
