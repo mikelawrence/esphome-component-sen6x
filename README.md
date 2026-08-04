@@ -19,9 +19,9 @@ sensor:
   - platform: sen6x
     id: my_sen66
     type: SEN66
-    temperature_compensation:
+    temperature_offset:
       offset: 0
-      normalized_offset_slope: 0
+      slope: 0
       time_constant: 0
     temperature_acceleration:
       k: 20
@@ -84,21 +84,21 @@ sensor:
   | Strong (Air Purifier)  |   250   |   300   |  150   |   20   |
 
   For more information see
-  [SEN6x – Temperature Acceleration and Compensation Instructions](https://sensirion.com/media/documents/C964FCC8/693FD554/PS_AN_SEN6x_Temperature_Compensation_and_Acceleration_Application_No.pdf).
+  [SEN6x – Temperature Acceleration and Compensation Instructions](https://sensirion.com/media/documents/C964FCC8/693FD554/PS_AN_SEN6x_temperature_offset__and_Acceleration_Application_No.pdf).
 
   * **k** (*Required*): Filter constant K.
   * **p** (*Required*): Filter constant P.
   * **t1** (*Required*): Time constant T1 in seconds.
   * **t2** (*Required*): Time constant T2 in seconds.
 
-* **temperature_compensation** (*Optional*, sequence): These parameters allow the user to compensate temperature
+* **temperature_offset** (*Optional*, sequence): These parameters allow the user to compensate temperature
   effects of the design-in at the customer side by applying custom temperature offsets to the ambient temperature.
   Temperature Compensation is a sequence (called slots) of compensation parameter sets. Up to five
   temperature compensation sets are supported.
   See [Temperature Compensation](#temperature-compensation) section below for more information.
 
   * **offset** (*Optional*, float): Temperature offset, in °C. Defaults to `0`.
-  * **normalized_offset_slope** (*Optional*, float): Normalized temperature offset slope. Defaults to `0`.
+  * **slope** (*Optional*, float): Normalized temperature offset slope. Defaults to `0`.
   * **time_constant** (*Optional*, positive int): Time constant in seconds. Defaults to `0`.
 
 # Sensors
@@ -305,7 +305,7 @@ sensor:
 
 The CO₂ sensor supports pressure/altitude compensation to improve CO₂ accuracy. If a pressure sensor is available
 you can dynamically adjust pressure compensation by either adding `ambient_pressure_compensation_source` to your
-configuration for automatic updates or you can periodically call the `sen6x.set_ambient_pressure_compensation`
+configuration for automatic updates or you can periodically call the `sen6x.set_ambient_pressure`
 action with the current ambient pressure. You can also statically define `altitude_compensation`.
 
 ### Dynamic example with a local sensor
@@ -327,10 +327,10 @@ sensor:
       ambient_pressure_compensation_source: pressure_hpa
 ```
 
-### Dynamic example `sen6x.set_ambient_pressure_compensation` Action
+### Dynamic example `sen6x.set_ambient_pressure` Action
 
 This [action](https://esphome.io/automations/actions/#actions) updates the current pressure used in CO₂ pressure compensation.
-Must be in hPa or mBar. Note: Once `set_ambient_pressure_compensation` is called `altitude_compensation`, if
+Must be in hPa or mBar. Note: Once `set_ambient_pressure` is called `altitude_compensation`, if
 set in the configuration, will be ignored. Only available with SEN63C, SEN66 or SEN69C.
 
 ```yaml
@@ -346,7 +346,7 @@ sensor:
     on_value:
       then:
         - lambda: !lambda |-
-            id(sen66_sensor).set_ambient_pressure_compensation(x);
+            id(sen66_sensor).set_ambient_pressure(x);
   - platform: sen6x
     type: SEN69C
     id: sen66_sensor
@@ -374,15 +374,15 @@ calculated as follows:
 T_Ambient_Compensated = T_Ambient + (slope*T_Ambient) + offset
 ```
 
-Where slope and offset are the values set with `temperature_compensation` configuration variables, smoothed
-with the specified time constant, also a `temperature_compensation` configuration variable. The time constant
+Where slope and offset are the values set with `temperature_offset` configuration variables, smoothed
+with the specified time constant, also a `temperature_offset` configuration variable. The time constant
 is how fast the slope and offset are applied. After the specified value in seconds, 63% of the new slope and
 offset are applied.
 
 More details about the tuning of these parameters is included in the application note:
-[SEN6x – Temperature Acceleration and Compensation Instructions](https://sensirion.com/media/documents/C964FCC8/693FD554/PS_AN_SEN6x_Temperature_Compensation_and_Acceleration_Application_No.pdf).
+[SEN6x – Temperature Acceleration and Compensation Instructions](https://sensirion.com/media/documents/C964FCC8/693FD554/PS_AN_SEN6x_temperature_offset__and_Acceleration_Application_No.pdf).
 
-### `sen6x.set_temperature_compensation` Action
+### `sen6x.set_temperature_offset` Action
 
 This [action](https://esphome.io/automations/actions/#actions) give you access to temperature compensation slots 0-4.
 This is a dynamic compensation that for example can be used when internal devices are turned on that cause additional heating.
@@ -392,10 +392,10 @@ button:
   - platform: template
     name: "Set Slot 1 TC"
     on_press:
-      - sen6x.set_temperature_compensation:
+      - sen6x.set_temperature_offset:
           id: sen66_sensor
           slot: 1
           offset: -1.2
-          normalized_offset_slope: 0
+          offset: 0
           time_constant: 0
 ```
