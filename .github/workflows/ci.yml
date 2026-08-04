@@ -31,7 +31,7 @@ jobs:
 
       - name: Get latest ESPHome release tag
         id: esphome-release
-        uses: oprypin/find-latest-tag@c4f7ea425f83d1eaeeb7e0b0e9e5b1e6a9a4b0ee  # v1.1.2 — verify SHA
+        uses: oprypin/find-latest-tag@6957ac556fa6d349727ecabfcaaf9f8e5ee37124  # v1.1.3
         with:
           repository: esphome/esphome
           releases-only: true
@@ -122,7 +122,7 @@ jobs:
           git diff --stat
 
       - name: Commit and push json changes
-        uses: devops-infra/action-commit-push@d5f5b0d61d3e2c1f7f1a2b4a0b4a1c2d3e4f5a6b  # v1.0.3 — verify SHA
+        uses: devops-infra/action-commit-push@f066ea8e19660de57d3d3a4a0b9d294ea2612e20  # v1.5.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           commit_message: "Update last successfully tested ESPHome release version to ${{ needs.check.outputs.latest_tag }}"
