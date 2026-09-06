@@ -5,6 +5,7 @@ from esphome.automation import maybe_simple_id
 import esphome.codegen as cg
 from esphome.components import i2c, sensirion_common, sensor, time
 import esphome.config_validation as cv
+from esphome.components.const import CONF_NOX_INDEX, CONF_VOC_INDEX
 from esphome.const import (
     CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE,
     CONF_ALGORITHM_TUNING,
@@ -19,7 +20,6 @@ from esphome.const import (
     CONF_LEARNING_TIME_GAIN_HOURS,
     CONF_LEARNING_TIME_OFFSET_HOURS,
     CONF_NOX,
-    CONF_NOX_INDEX,
     CONF_OFFSET,
     CONF_PM_1_0,
     CONF_PM_2_5,
@@ -32,7 +32,6 @@ from esphome.const import (
     CONF_TYPE,
     CONF_VALUE,
     CONF_VOC,
-    CONF_VOC_INDEX,
     DEVICE_CLASS_AQI,
     DEVICE_CLASS_CARBON_DIOXIDE,
     DEVICE_CLASS_HUMIDITY,
