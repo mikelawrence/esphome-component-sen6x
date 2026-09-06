@@ -13,7 +13,7 @@ esp32:
     type: esp-idf
 
 external_components:
-  - source: github://mikelawrence/esphome-component-sen6x@{ref}
+  - source: github://mikelawrence/esphome-component-sen6x@${ref}
 
 wifi:
   ssid: MyHomeNetwork
@@ -67,7 +67,7 @@ sensor:
       name: "CO₂"
       automatic_self_calibration: false
       accuracy_decimals: 0
-    nox:
+    nox_index:
       name: "NOₓ"
       accuracy_decimals: 0
       algorithm_tuning:
@@ -75,7 +75,7 @@ sensor:
         learning_time_offset_hours: 12
         gating_max_duration_minutes: 720
         gain_factor: 230
-    voc:
+    voc_index:
       name: "VOC"
       accuracy_decimals: 0
       algorithm_state_recovery: true

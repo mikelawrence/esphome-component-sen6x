@@ -5,6 +5,7 @@ from esphome.automation import maybe_simple_id
 import esphome.codegen as cg
 from esphome.components import i2c, sensirion_common, sensor, time
 import esphome.config_validation as cv
+from esphome.components.const import CONF_NOX_INDEX, CONF_VOC_INDEX
 from esphome.const import (
     CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE,
     CONF_ALGORITHM_TUNING,
@@ -57,7 +58,7 @@ CODEOWNERS = ["@mikelawrence"]
 DEPENDENCIES = ["i2c"]
 AUTO_LOAD = ["sensirion_common"]
 
-MIN_ESPHOME_VERSION = (2026, 4, 0)
+MIN_ESPHOME_VERSION = (2026, 8, 0)
 
 sen6x_ns = cg.esphome_ns.namespace("sen6x")
 Sen6xComponent = sen6x_ns.class_(
@@ -147,23 +148,23 @@ def deprecated_action_schema(schema, old_name: str, new_name: str):
     return cv.All(schema, _deprecated_action(old_name, new_name))
 
 
-def _deprecated_key(old_name: str, new_name: str):
-    """Return a validator that warns when a renamed configuration key is used.
+# def _deprecated_key(old_name: str, new_name: str):
+#     """Return a validator that warns when a renamed configuration key is used.
 
-    Must run *before* cv.rename_key(), while the old key is still present.
-    """
+#     Must run *before* cv.rename_key(), while the old key is still present.
+#     """
 
-    def validator(config):
-        if old_name in config:
-            _LOGGER.warning(
-                "The '%s' configuration option is deprecated and will be removed in "
-                "January 2027; use '%s' instead.",
-                old_name,
-                new_name,
-            )
-        return config
+#     def validator(config):
+#         if old_name in config:
+#             _LOGGER.warning(
+#                 "The '%s' configuration option is deprecated and will be removed in "
+#                 "January 2027; use '%s' instead.",
+#                 old_name,
+#                 new_name,
+#             )
+#         return config
 
-    return validator
+#     return validator
 
 
 def _gas_sensor(
@@ -256,11 +257,11 @@ BASE_SCHEMA = (
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
             cv.Optional(CONF_TEMPERATURE_OFFSET): cv.All(
-                _deprecated_key(
-                    CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE,
-                    CONF_SLOPE,
-                ),
-                cv.rename_key(CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE, CONF_SLOPE),
+                # _deprecated_key(
+                #     CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE,
+                #     CONF_SLOPE,
+                # ),
+                cv.rename_key(CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE, CONF_SLOPE, removed_in="2027.1.0", component="sen6x"),
                 cv.Schema(
                     {
                         cv.Required(CONF_OFFSET): cv.float_range(min=-100.0, max=100.0),
@@ -312,7 +313,7 @@ CO2_SCHEMA = cv.Schema(
 
 VOC_SCHEMA = cv.Schema(
     {
-        cv.Optional(CONF_VOC): _gas_sensor(
+        cv.Optional(CONF_VOC_INDEX): _gas_sensor(
             index_offset=100,
             learning_time_offset=12,
             learning_time_gain=12,
@@ -334,7 +335,7 @@ VOC_SCHEMA = cv.Schema(
 
 NOX_SCHEMA = cv.Schema(
     {
-        cv.Optional(CONF_NOX): _gas_sensor(
+        cv.Optional(CONF_NOX_INDEX): _gas_sensor(
             index_offset=1,
             learning_time_offset=12,
             learning_time_gain=12,
@@ -360,11 +361,13 @@ SEN65_SCHEMA = BASE_SCHEMA.extend(VOC_SCHEMA).extend(NOX_SCHEMA)
 
 CONFIG_SCHEMA = cv.All(
     cv.require_esphome_version(*MIN_ESPHOME_VERSION),
-    _deprecated_key(
-        CONF_DEPRECATED_TEMPERATURE_COMPENSATION,
-        CONF_TEMPERATURE_OFFSET,
-    ),
-    cv.rename_key(CONF_DEPRECATED_TEMPERATURE_COMPENSATION, CONF_TEMPERATURE_OFFSET),
+    # _deprecated_key(
+    #     CONF_DEPRECATED_TEMPERATURE_COMPENSATION,
+    #     CONF_TEMPERATURE_OFFSET,
+    # ),
+    cv.rename_key(CONF_DEPRECATED_TEMPERATURE_COMPENSATION, CONF_TEMPERATURE_OFFSET, removed_in="2027.1.0", component="sen6x"),
+    cv.rename_key(CONF_VOC, CONF_VOC_INDEX, removed_in="2027.2.0", component="sen6x"),
+    cv.rename_key(CONF_NOX, CONF_NOX_INDEX, removed_in="2027.2.0", component="sen6x"),
     cv.typed_schema(
         {
             SEN62: BASE_SCHEMA,
@@ -383,8 +386,8 @@ CONFIG_SCHEMA = cv.All(
         CONF_PM_10_0,
         CONF_TEMPERATURE,
         CONF_HUMIDITY,
-        CONF_VOC,
-        CONF_NOX,
+        CONF_VOC_INDEX,
+        CONF_NOX_INDEX,
         CONF_CO2,
         CONF_HCHO,
     ),
@@ -395,8 +398,8 @@ SENSOR_MAP = {
     CONF_PM_2_5: "set_pm_2_5_sensor",
     CONF_PM_4_0: "set_pm_4_0_sensor",
     CONF_PM_10_0: "set_pm_10_0_sensor",
-    CONF_VOC: "set_voc_sensor",
-    CONF_NOX: "set_nox_sensor",
+    CONF_VOC_INDEX: "set_voc_sensor",
+    CONF_NOX_INDEX: "set_nox_sensor",
     CONF_TEMPERATURE: "set_temperature_sensor",
     CONF_HUMIDITY: "set_humidity_sensor",
     CONF_CO2: "set_co2_sensor",
@@ -427,7 +430,7 @@ async def to_code(config):
             sens = await sensor.new_sensor(cfg)
             cg.add(getattr(var, func_name)(sens))
 
-    if cfg := config.get(CONF_VOC):
+    if cfg := config.get(CONF_VOC_INDEX):
         if tuning := cfg.get(CONF_ALGORITHM_TUNING):
             cg.add(
                 var.set_voc_algorithm_tuning(
@@ -450,7 +453,7 @@ async def to_code(config):
             time_ = await cg.get_variable(source)
             cg.add(var.set_time_source(time_))
 
-    if cfg := config.get(CONF_NOX, {}).get(CONF_ALGORITHM_TUNING):
+    if cfg := config.get(CONF_NOX_INDEX, {}).get(CONF_ALGORITHM_TUNING):
         cg.add(
             var.set_nox_algorithm_tuning(
                 cfg[CONF_INDEX_OFFSET],
@@ -516,6 +519,7 @@ SEN6X_VALUE_ACTION_SCHEMA = maybe_simple_id(
     }
 )
 
+# Deprecated: Remove January 2027.
 SEN6X_DEPRECATED_AMBIENT_PRESSURE_COMPENSATION_SCHEMA = deprecated_action_schema(
     SEN6X_VALUE_ACTION_SCHEMA,
     ACTION_DEPRECATED_SET_AMBIENT_PRESSURE_COMPENSATION,
@@ -535,6 +539,7 @@ SEN6X_DEPRECATED_AMBIENT_PRESSURE_COMPENSATION_SCHEMA = deprecated_action_schema
     SEN6X_VALUE_ACTION_SCHEMA,
     synchronous=False,
 )
+# Deprecated: Remove January 2027.
 @automation.register_action(
     ACTION_DEPRECATED_SET_AMBIENT_PRESSURE_COMPENSATION,
     SetAmbientPressureCompensationDeprecatedAction,
@@ -549,6 +554,7 @@ async def sen6x_uint16_to_code(config, action_id, template_arg, args):
     return var
 
 
+# Deprecated: Remove January 2027.
 SEN6X_DEPRECATED_TEMPERATURE_COMPENSATION_SCHEMA = deprecated_action_schema(
     cv.Schema(
         {
@@ -572,6 +578,7 @@ SEN6X_DEPRECATED_TEMPERATURE_COMPENSATION_SCHEMA = deprecated_action_schema(
 )
 
 
+# Deprecated: Remove January 2027.
 @automation.register_action(
     ACTION_DEPRECATED_SET_TEMPERATURE_COMPENSATION,
     SetTemperatureCompensationDeprecatedAction,
