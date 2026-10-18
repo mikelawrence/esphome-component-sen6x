@@ -420,9 +420,7 @@ FINAL_VALIDATE_SCHEMA = final_validate
 
 
 async def to_code(config):
-    var = cg.new_Pvariable(config[CONF_ID])
-    await cg.register_component(var, config)
-    await i2c.register_i2c_device(var, config)
+    var = await i2c.new_i2c_component(config)
     cg.add(var.set_type(SEN6X_TYPES[config[CONF_TYPE]]))
 
     for key, func_name in SENSOR_MAP.items():
