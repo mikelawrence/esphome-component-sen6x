@@ -568,7 +568,7 @@ SEN6X_DEPRECATED_TEMPERATURE_COMPENSATION_SCHEMA = deprecated_action_schema(
                 cv.float_range(min=-3.2768, max=3.2767)
             ),
             cv.Optional(CONF_TIME_CONSTANT, default=0): cv.templatable(
-                cv.int_range(min=0, max=65535),
+                cv.uint16_t,
             ),
             cv.Optional(CONF_SLOT, default=0): cv.templatable(cv.int_range(0, 4)),
         }
@@ -614,7 +614,7 @@ SEN6X_TEMPERATURE_OFFSET_SCHEMA = cv.Schema(
             cv.float_range(min=-3.2768, max=3.2767)
         ),
         cv.Optional(CONF_TIME_CONSTANT, default=0): cv.templatable(
-            cv.int_range(min=0, max=65535),
+            cv.uint16_t,
         ),
         cv.Optional(CONF_SLOT, default=0): cv.templatable(cv.int_range(0, 4)),
     }
