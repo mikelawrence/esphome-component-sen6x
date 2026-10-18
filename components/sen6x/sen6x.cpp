@@ -7,7 +7,7 @@
 
 namespace esphome::sen6x {
 
-static const char *const TAG = "sen6x";
+ESPHOME_LOG_TAG(TAG, "sen6x");
 
 static const uint8_t CMD_FLAG_SETUP = 0x01;
 static const uint8_t CMD_FLAG_MEASUREMENT = 0x02;
