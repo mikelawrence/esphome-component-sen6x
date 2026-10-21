@@ -5,7 +5,8 @@
 #include "esphome/core/log.h"
 #include <cinttypes>
 
-namespace esphome::sen6x {
+namespace esphome {
+namespace sen6x {
 
 static const char *const TAG = "sen6x";
 
@@ -1013,4 +1014,5 @@ bool Sen6xComponent::set_temperature_compensation(float offset, float slope, uin
   return true;
 }
 
-}  // namespace esphome::sen6x
+}  // namespace sen6x
+}  // namespace esphome
