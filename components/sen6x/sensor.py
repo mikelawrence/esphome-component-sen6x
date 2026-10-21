@@ -148,25 +148,6 @@ def deprecated_action_schema(schema, old_name: str, new_name: str):
     return cv.All(schema, _deprecated_action(old_name, new_name))
 
 
-# def _deprecated_key(old_name: str, new_name: str):
-#     """Return a validator that warns when a renamed configuration key is used.
-
-#     Must run *before* cv.rename_key(), while the old key is still present.
-#     """
-
-#     def validator(config):
-#         if old_name in config:
-#             _LOGGER.warning(
-#                 "The '%s' configuration option is deprecated and will be removed in "
-#                 "January 2027; use '%s' instead.",
-#                 old_name,
-#                 new_name,
-#             )
-#         return config
-
-#     return validator
-
-
 def _gas_sensor(
     *,
     index_offset: int,
