@@ -4,12 +4,12 @@ from esphome import automation
 from esphome.automation import maybe_simple_id
 import esphome.codegen as cg
 from esphome.components import i2c, sensirion_common, sensor, time
-import esphome.config_validation as cv
 from esphome.components.const import CONF_NOX_INDEX, CONF_VOC_INDEX
+import esphome.config_validation as cv
 from esphome.const import (
-    CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE,
     CONF_ALGORITHM_TUNING,
     CONF_ALTITUDE_COMPENSATION,
+    CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE,
     CONF_AUTOMATIC_SELF_CALIBRATION,
     CONF_CO2,
     CONF_GAIN_FACTOR,
@@ -257,16 +257,19 @@ BASE_SCHEMA = (
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
             cv.Optional(CONF_TEMPERATURE_OFFSET): cv.All(
-                # _deprecated_key(
-                #     CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE,
-                #     CONF_SLOPE,
-                # ),
-                cv.rename_key(CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE, CONF_SLOPE, removed_in="2027.1.0", component="sen6x"),
+                cv.rename_key(
+                    CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE,
+                    CONF_SLOPE,
+                    removed_in="2027.1.0",
+                    component="sen6x",
+                ),
                 cv.Schema(
                     {
                         cv.Required(CONF_OFFSET): cv.float_range(min=-100.0, max=100.0),
-                        cv.Required(CONF_SLOPE): cv.float_range(min=-3.2768, max=3.2767),
-                        cv.Required(CONF_TIME_CONSTANT): cv.int_range(min=0, max=65565),
+                        cv.Required(CONF_SLOPE): cv.float_range(
+                            min=-3.2768, max=3.2767
+                        ),
+                        cv.Required(CONF_TIME_CONSTANT): cv.uint16_t,
                     }
                 ),
             ),
@@ -361,11 +364,12 @@ SEN65_SCHEMA = BASE_SCHEMA.extend(VOC_SCHEMA).extend(NOX_SCHEMA)
 
 CONFIG_SCHEMA = cv.All(
     cv.require_esphome_version(*MIN_ESPHOME_VERSION),
-    # _deprecated_key(
-    #     CONF_DEPRECATED_TEMPERATURE_COMPENSATION,
-    #     CONF_TEMPERATURE_OFFSET,
-    # ),
-    cv.rename_key(CONF_DEPRECATED_TEMPERATURE_COMPENSATION, CONF_TEMPERATURE_OFFSET, removed_in="2027.1.0", component="sen6x"),
+    cv.rename_key(
+        CONF_DEPRECATED_TEMPERATURE_COMPENSATION,
+        CONF_TEMPERATURE_OFFSET,
+        removed_in="2027.1.0",
+        component="sen6x",
+    ),
     cv.rename_key(CONF_VOC, CONF_VOC_INDEX, removed_in="2027.2.0", component="sen6x"),
     cv.rename_key(CONF_NOX, CONF_NOX_INDEX, removed_in="2027.2.0", component="sen6x"),
     cv.typed_schema(
@@ -564,11 +568,9 @@ SEN6X_DEPRECATED_TEMPERATURE_COMPENSATION_SCHEMA = deprecated_action_schema(
             ),
             cv.Optional(
                 CONF_DEPRECATED_NORMALIZED_OFFSET_SLOPE, default=0.0
-            ): cv.templatable(
-                cv.float_range(min=-3.2768, max=3.2767)
-            ),
+            ): cv.templatable(cv.float_range(min=-3.2768, max=3.2767)),
             cv.Optional(CONF_TIME_CONSTANT, default=0): cv.templatable(
-                cv.int_range(min=0, max=65535),
+                cv.uint16_t,
             ),
             cv.Optional(CONF_SLOT, default=0): cv.templatable(cv.int_range(0, 4)),
         }
@@ -614,7 +616,7 @@ SEN6X_TEMPERATURE_OFFSET_SCHEMA = cv.Schema(
             cv.float_range(min=-3.2768, max=3.2767)
         ),
         cv.Optional(CONF_TIME_CONSTANT, default=0): cv.templatable(
-            cv.int_range(min=0, max=65535),
+            cv.uint16_t,
         ),
         cv.Optional(CONF_SLOT, default=0): cv.templatable(cv.int_range(0, 4)),
     }
