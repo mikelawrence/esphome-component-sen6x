@@ -429,14 +429,13 @@ async def to_code(config):
             )
         if sas := cfg.get(CONF_ALGORITHM_STATE_RECOVERY):
             cg.add(var.set_store_voc_algorithm_state(sas))
-        if source := cfg.get(CONF_ALGORITHM_STATE_TIME_SOURCE):
-            if CONF_ALGORITHM_STATE_RECOVERY not in cfg:
-                raise cv.Invalid(
-                    f"If '{CONF_ALGORITHM_STATE_TIME_SOURCE}' is defined, "
-                    f"'{CONF_ALGORITHM_STATE_RECOVERY}' must also be defined"
-                )
-            time_ = await cg.get_variable(source)
-            cg.add(var.set_time_source(time_))
+        source = cfg.get(CONF_ALGORITHM_STATE_TIME_SOURCE)
+        if source and CONF_ALGORITHM_STATE_RECOVERY not in cfg:
+            raise cv.Invalid(
+                f"If '{CONF_ALGORITHM_STATE_TIME_SOURCE}' is defined, "
+                f"'{CONF_ALGORITHM_STATE_RECOVERY}' must also be defined"
+            )
+        await cg.add_variable(var.set_time_source, source)
 
     if cfg := config.get(CONF_NOX_INDEX, {}).get(CONF_ALGORITHM_TUNING):
         cg.add(
@@ -471,9 +470,10 @@ async def to_code(config):
         for key, func_name in CO2_SETTING_MAP.items():
             if setting := cfg.get(key):
                 cg.add(getattr(var, func_name)(setting))
-        if source := cfg.get(CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE):
-            press = await cg.get_variable(source)
-            cg.add(var.set_ambient_pressure_source(press))
+        await cg.add_variable(
+            var.set_ambient_pressure_source,
+            cfg.get(CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE),
+        )
 
 
 SEN6X_ACTION_SCHEMA = maybe_simple_id({cv.GenerateID(): cv.use_id(Sen6xComponent)})
