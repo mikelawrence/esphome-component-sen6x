@@ -3,12 +3,17 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
+#include "esphome/core/version.h"
 #include <cinttypes>
 
 namespace esphome {
 namespace sen6x {
 
+#if ESPHOME_VERSION_CODE >= VERSION_CODE(2026, 10, 0)
+ESPHOME_LOG_TAG(TAG, "sen6x");
+#else
 static const char *const TAG = "sen6x";
+#endif
 
 static const uint8_t CMD_FLAG_SETUP = 0x01;
 static const uint8_t CMD_FLAG_MEASUREMENT = 0x02;
