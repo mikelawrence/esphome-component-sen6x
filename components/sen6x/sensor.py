@@ -50,6 +50,7 @@ from esphome.const import (
     UNIT_PARTS_PER_BILLION,
     UNIT_PARTS_PER_MILLION,
     UNIT_PERCENT,
+    __version__,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -405,9 +406,14 @@ FINAL_VALIDATE_SCHEMA = final_validate
 
 
 async def to_code(config):
-    var = cg.new_Pvariable(config[CONF_ID])
-    await cg.register_component(var, config)
-    await i2c.register_i2c_device(var, config)
+    # TODO: Remove this check when we drop support for ESPHome 2026.10.0 and older
+    if cv.Version.parse(__version__) >= cv.Version(2026, 11, 0):
+        var = await i2c.new_i2c_component(config)
+    else:
+        var = cg.new_Pvariable(config[CONF_ID])
+        await cg.register_component(var, config)
+        await i2c.register_i2c_device(var, config)
+
     cg.add(var.set_type(SEN6X_TYPES[config[CONF_TYPE]]))
 
     for key, func_name in SENSOR_MAP.items():
