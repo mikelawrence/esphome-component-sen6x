@@ -1,6 +1,9 @@
 substitutions:
   ref: main
 
+logger:
+  level: VERY_VERBOSE
+
 esphome:
   name: test-sen6x-esp32-s3-ard
   friendly_name: Test SEN6X Component with ESP32-S3 and Arduino Framework
