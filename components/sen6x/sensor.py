@@ -475,7 +475,7 @@ async def to_code(config):
             if setting := cfg.get(key):
                 cg.add(getattr(var, func_name)(setting))
         pressure_source = cfg.get(CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE)
-        if cv.Version.parse(ESPHOME_VERSION) >= ADD_VARIABLE_VERSION:
+        if cv.Version.parse(__version__) >= cv.Version(2026, 11, 0):
             await cg.add_variable(var.set_ambient_pressure_source, pressure_source)
         elif pressure_source:
             cg.add(
