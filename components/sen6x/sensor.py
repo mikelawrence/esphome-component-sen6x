@@ -50,6 +50,7 @@ from esphome.const import (
     UNIT_PARTS_PER_BILLION,
     UNIT_PARTS_PER_MILLION,
     UNIT_PERCENT,
+    __version__,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -435,7 +436,10 @@ async def to_code(config):
                 f"If '{CONF_ALGORITHM_STATE_TIME_SOURCE}' is defined, "
                 f"'{CONF_ALGORITHM_STATE_RECOVERY}' must also be defined"
             )
-        await cg.add_variable(var.set_time_source, source)
+        if cv.Version.parse(__version__) >= cv.Version(2026, 11, 0):
+            await cg.add_variable(var.set_time_source, source)
+        elif source:
+            cg.add(var.set_time_source(await cg.get_variable(source)))
 
     if cfg := config.get(CONF_NOX_INDEX, {}).get(CONF_ALGORITHM_TUNING):
         cg.add(
@@ -470,10 +474,15 @@ async def to_code(config):
         for key, func_name in CO2_SETTING_MAP.items():
             if setting := cfg.get(key):
                 cg.add(getattr(var, func_name)(setting))
-        await cg.add_variable(
-            var.set_ambient_pressure_source,
-            cfg.get(CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE),
-        )
+        pressure_source = cfg.get(CONF_AMBIENT_PRESSURE_COMPENSATION_SOURCE)
+        if cv.Version.parse(ESPHOME_VERSION) >= ADD_VARIABLE_VERSION:
+            await cg.add_variable(var.set_ambient_pressure_source, pressure_source)
+        elif pressure_source:
+            cg.add(
+                var.set_ambient_pressure_source(
+                    await cg.get_variable(pressure_source)
+                )
+            )
 
 
 SEN6X_ACTION_SCHEMA = maybe_simple_id({cv.GenerateID(): cv.use_id(Sen6xComponent)})
