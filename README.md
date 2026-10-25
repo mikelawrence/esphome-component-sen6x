@@ -40,9 +40,8 @@ sensor:
       name: "Temperature"
     humidity:
       name: "Humidity"
-    voc:
+    voc_index:
       name: "VOC"
-      store_algorithm_state: true
       algorithm_tuning:
         index_offset: 100
         learning_time_offset_hours: 12
@@ -50,7 +49,7 @@ sensor:
         gating_max_duration_minutes: 180
         std_initial: 50
         gain_factor: 230
-    nox:
+    nox_index:
       name: "NOx"
       algorithm_tuning:
         index_offset: 1
@@ -91,15 +90,13 @@ sensor:
   * **t1** (*Required*): Time constant T1 in seconds.
   * **t2** (*Required*): Time constant T2 in seconds.
 
-* **temperature_offset** (*Optional*, sequence): These parameters allow the user to compensate temperature
-  effects of the design-in at the customer side by applying custom temperature offsets to the ambient temperature.
-  Temperature Compensation is a sequence (called slots) of compensation parameter sets. Up to five
-  temperature compensation sets are supported.
+* **temperature_offset** (*Optional*, mapping): These parameters allow the user to compensate temperature
+  effects of the design-in at the customer side by applying a custom temperature offset to the ambient temperature.
   See [Temperature Compensation](#temperature-compensation) section below for more information.
 
-  * **offset** (*Optional*, float): Temperature offset, in °C. Defaults to `0`.
-  * **slope** (*Optional*, float): Normalized temperature offset slope. Defaults to `0`.
-  * **time_constant** (*Optional*, positive int): Time constant in seconds. Defaults to `0`.
+  * **offset** (*Required*, float, -100 to 100): Temperature offset, in °C.
+  * **slope** (*Required*, float, -3.2768 to 3.2767): Normalized temperature offset slope.
+  * **time_constant** (*Required*, uint16): Time constant in seconds, from 0 to 65535.
 
 # Sensors
 
@@ -124,7 +121,7 @@ sensor:
 * **co2** (*Optional*): The information for the Carbon dioxide (CO₂) sensor. Readings in ppm. Only available with
   SEN63C, SEN66 or SEN69C.
 
-  * **auto_self_calibration** (*Optional*, boolean): True enables automatic CO₂ self calibration.
+  * **automatic_self_calibration** (*Optional*, boolean): True enables automatic CO₂ self calibration.
   False disables automatic CO₂ calibration. Default is `true`.
   * **altitude_compensation** (*Optional*, integer): When set to altitude (in meters), the CO₂ sensor will be
   statically compensated for deviations due to current altitude. See [CO₂ Compensation](#co₂-compensation) section below
@@ -135,12 +132,10 @@ sensor:
   [CO₂ Compensation](#co₂-compensation) section below for more information.
   * All options from [Sensor](/components/sensor#config-sensor).
 
-* **voc** (*Optional*): The information for the VOC Index sensor. Only available with SEN65, SEN66, SEN69 or SEN69C.
+* **voc_index** (*Optional*): The information for the VOC Index sensor. Only available with SEN65, SEN66, SEN68 or SEN69C. The legacy key `voc` is accepted but deprecated.
 
-  * **store_algorithm_state** (*Optional*, boolean): When set to `true` the VOC algorithm state is saved to flash every
-    2 hours. During setup of the sensor the previously saved algorithm state is loaded and the VOC sensor will
-    skip the initial learning phase.
-    Only available with SEN65, SEN66, SEN68 or SEN69C.
+  * **algorithm_state_recovery** (*Optional*, boolean): Enables storing and restoring the VOC algorithm state.
+  * **algorithm_state_time_source** (*Optional*, [ID](/guides/configuration-types#config-id)): Time source used for algorithm-state recovery. This option requires `algorithm_state_recovery`.
   * **algorithm_tuning** (*Optional*): The VOC algorithm can be customized by tuning 6 different parameters.
     For more details see
     [Engineering Guidelines for SEN5X](https://sensirion.com/media/documents/25AB572C/62B463AA/Sensirion_Engineering_Guidelines_SEN5x.pdf)
@@ -162,7 +157,7 @@ sensor:
     * **gain_factor** (*Optional*): Gain factor to amplify or to attenuate the VOC index output.
       Allowed values are in range 1..1000. The default value is 230. All options from [Sensor](/components/sensor#config-sensor).
 
-* **nox** (*Optional*): NOx Index. Only available with SEN65, SEN66, SEN69 or SEN69C.
+* **nox_index** (*Optional*): NOx Index. Only available with SEN65, SEN66, SEN68 or SEN69C. The legacy key `nox` is accepted but deprecated.
 
   * **algorithm_tuning** (*Optional*): Like VOC the NOx algorithm can be customized by tuning 5 different parameters.
     For more details see
