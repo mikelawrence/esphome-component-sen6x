@@ -484,9 +484,7 @@ async def to_code(config):
             await cg.add_variable(var.set_ambient_pressure_source, pressure_source)
         elif pressure_source:
             cg.add(
-                var.set_ambient_pressure_source(
-                    await cg.get_variable(pressure_source)
-                )
+                var.set_ambient_pressure_source(await cg.get_variable(pressure_source))
             )
 
 
