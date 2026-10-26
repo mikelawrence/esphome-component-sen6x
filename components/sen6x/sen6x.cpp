@@ -856,8 +856,15 @@ void Sen6xComponent::dump_config() {
     ESP_LOGCONFIG(TAG, "    Automatic self calibration: %s", TRUEFALSE(this->auto_self_calibration_.value()));
   }
   if (this->ambient_pressure_compensation_source_ != nullptr) {
+#if ESPHOME_VERSION_CODE >= VERSION_CODE(2026, 11, 0)
+    // TODO: Drop the get_name() fallback below once ESPHome 2026.11.0 is the minimum supported version
+    char name_buf[ENTITY_NAME_BUF_SIZE];
+    ESP_LOGCONFIG(TAG, "    Ambient Pressure Compensation Source: %s",
+                  this->ambient_pressure_compensation_source_->get_name_to(name_buf).c_str());
+#else
     ESP_LOGCONFIG(TAG, "    Ambient Pressure Compensation Source: %s",
                   this->ambient_pressure_compensation_source_->get_name().c_str());
+#endif
   } else if (this->altitude_compensation_.has_value()) {
     ESP_LOGCONFIG(TAG, "    Altitude Compensation: %" PRIu16, this->altitude_compensation_.value());
   }
