@@ -226,7 +226,7 @@ try {
     $progress = @{}
     foreach ($job in $jobs) {
         $progress[$job.Id] = @{
-            Version = ""; Started = 0; Config = ""; Phase = "Starting"; Warnings = 0; Errors = 0; Elapsed = $null
+            Version = ""; Started = 0; Config = ""; Phase = "Starting"; CompileCount = 0; Warnings = 0; Errors = 0; Elapsed = $null
         }
     }
     $buildStart = [datetime]::Now
@@ -241,6 +241,7 @@ try {
                     $state.Started++
                     $state.Config = $Matches.name
                     $state.Phase = "Starting"
+                    $state.CompileCount = 0
                 }
                 elseif ($line -match '\] INFO ESPHome (?<version>\S+)\s*$') { $state.Version = $Matches.version }
                 elseif ($line -match '\] INFO Reading configuration') { $state.Phase = "Reading config" }
@@ -249,6 +250,14 @@ try {
                 elseif ($line -match '\[(?<n>\d+)/(?<m>\d+)\] (Building|Linking|Generating)') {
                     $state.Phase = "Building $($Matches.n)/$($Matches.m)"
                 }
+                elseif ($line -match '\] INFO Compiling app') { $state.Phase = "Preparing build" }
+                elseif ($line -match '\] Processing ') { $state.Phase = "Resolving platform" }
+                elseif ($line -match '\] (Compiling|Building) \.pioenvs/\S+\.(o|a)\s*$') {
+                    # PlatformIO has no total, so show how many objects have compiled so far
+                    $state.CompileCount++
+                    $state.Phase = "Compiling $($state.CompileCount) files"
+                }
+                elseif ($line -match '\] (Linking|Building|Creating|Retrieving|Checking) (\.pioenvs|maximum|size|firmware)') { $state.Phase = "Linking" }
                 elseif ($line -match '\] INFO Successfully compiled') { $state.Phase = "Compiled" }
 
                 # Compose volume-label notices are not build warnings
