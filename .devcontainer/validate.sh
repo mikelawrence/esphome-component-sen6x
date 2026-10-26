@@ -1,3 +1,5 @@
+
+
 #!/bin/bash
 set -uo pipefail
 
@@ -53,7 +55,15 @@ run_check() {
   fi
 }
 
-run_check yamllint yamllint --strict .
+# Prune build/VCS trees while walking: yamllint walks them (thousands of files on the
+# slow Docker bind mount) even though .gitignore excludes them from linting.
+mapfile -t yaml_files < <(
+  find . \( -name .git -o -name .esphome -o -name node_modules \) -prune -o \
+    -type f \( -name '*.yaml' -o -name '*.yml' -o -name '.yamllint' \) -print | sort
+)
+if ((${#yaml_files[@]})); then
+  run_check yamllint yamllint --strict "${yaml_files[@]}"
+fi
 mapfile -t cpp_files < <(
   find components -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.tcc' \) -print
 )
