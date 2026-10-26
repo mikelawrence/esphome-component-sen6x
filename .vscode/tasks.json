@@ -21,7 +21,8 @@
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "dedicated"
+        "panel": "shared",
+        "clear": false
       }
     },
     {
@@ -38,7 +39,8 @@
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-        "panel": "dedicated"
+        "panel": "shared",
+        "clear": false
       }
     },
     {

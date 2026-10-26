@@ -415,7 +415,8 @@ try {
             $logLines = [System.IO.File]::ReadAllLines($tempLogs[$job.Id], $utf8WithoutBom)
             [System.IO.File]::WriteAllLines($logPath, [string[]]$logLines, $utf8WithoutBom)
             Remove-Item -LiteralPath $tempLogs[$job.Id] -Force
-            Write-Host "Log saved to $logPath"
+            $relativeLogPath = ($logPath.Substring($repoRoot.TrimEnd('\').Length).TrimStart('\')) -replace '\\', '/'
+            Write-Host "Log saved to $relativeLogPath"
         }
     }
 
@@ -431,5 +432,3 @@ finally {
         Remove-Item -LiteralPath $stagedConfigDirectory -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
-
-Write-Output "All $($configs.Count) YAML files compiled successfully with $($images -join ', ')."
