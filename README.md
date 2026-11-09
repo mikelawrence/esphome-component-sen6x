@@ -12,8 +12,12 @@ This external component adds SEN62, SEN63C, SEN65, SEN66, SEN68 and SEN69C suppo
 external_components:
   - source:
       type: git
-      url: https://github.com/mikelawrence/esphome-components
+      url: https://github.com/mikelawrence/esphome-component-sen6x
     components: [ sen6x ]
+
+i2c:
+  sda: GPIO6
+  scl: GPIO7
 
 sensor:
   - platform: sen6x
@@ -59,10 +63,13 @@ sensor:
     co2:
       name: "CO₂"
       automatic_self_calibration: false
-      ambient_pressure_compensation_source: pressure_hpa
 ```
 
-## Configuration Variables
+## Sensor
+
+The `sen6x` platform configures the sensor and its measurements in one `sensor` entry.
+
+### Configuration Variables
 
 * **type** (*Required*, enum): The type of the connected sensor.Provides compile time config validation of sensors. Must be one of the following:
   SEN62, SEN63C, SEN65, SEN66, SEN68 or SEN69C. All options from [Sensor](/components/sensor#config-sensor).
@@ -85,20 +92,27 @@ sensor:
   For more information see
   [SEN6x – Temperature Acceleration and Compensation Instructions](https://sensirion.com/media/documents/C964FCC8/693FD554/PS_AN_SEN6x_temperature_offset__and_Acceleration_Application_No.pdf).
 
-  * **k** (*Required*): Filter constant K.
-  * **p** (*Required*): Filter constant P.
-  * **t1** (*Required*): Time constant T1 in seconds.
-  * **t2** (*Required*): Time constant T2 in seconds.
+  * **k** (*Required*, float, 0 to 6535.5): Filter constant K.
+  * **p** (*Required*, float, 0 to 6535.5): Filter constant P.
+  * **t1** (*Required*, float, 0 to 6535.5): Time constant T1 in seconds.
+  * **t2** (*Required*, float, 0 to 6535.5): Time constant T2 in seconds.
 
 * **temperature_offset** (*Optional*, mapping): These parameters allow the user to compensate temperature
   effects of the design-in at the customer side by applying a custom temperature offset to the ambient temperature.
+  If this mapping is supplied, all three fields below are required.
   See [Temperature Compensation](#temperature-compensation) section below for more information.
 
   * **offset** (*Required*, float, -100 to 100): Temperature offset, in °C.
   * **slope** (*Required*, float, -3.2768 to 3.2767): Normalized temperature offset slope.
   * **time_constant** (*Required*, uint16): Time constant in seconds, from 0 to 65535.
 
-# Sensors
+  The former `temperature_compensation` key is deprecated in favor of `temperature_offset` and is
+  scheduled for removal in ESPHome 2027.1.0.
+
+### Measurements
+
+At least one measurement must be configured. The former `voc` and `nox` keys are deprecated in favor
+of `voc_index` and `nox_index`, respectively, and are scheduled for removal in ESPHome 2027.2.0.
 
 * **pm_1_0** (*Optional*): The information for the **Mass Concentration** sensor for fine particles up to
   1μm in size. Readings in µg/m³. All options from [Sensor](/components/sensor#config-sensor).
@@ -159,19 +173,19 @@ sensor:
 
 * **nox_index** (*Optional*): NOx Index. Only available with SEN65, SEN66, SEN68 or SEN69C. The legacy key `nox` is accepted but deprecated.
 
-  * **algorithm_tuning** (*Optional*): Like VOC the NOx algorithm can be customized by tuning 5 different parameters.
+  * **algorithm_tuning** (*Optional*): The schema accepts six parameters. `learning_time_gain_hours` and `std_initial` are ignored by the NOx algorithm and set to 12 and 50 respectively.
     For more details see
     [Engineering Guidelines for SEN5X](https://sensirion.com/media/documents/25AB572C/62B463AA/Sensirion_Engineering_Guidelines_SEN5x.pdf)
 
     * **index_offset** (*Optional*): NOx index representing typical (average) conditions.
-      Allowed values are in range 1..250. The default value is 100.
+      Allowed values are in range 1..250. The default value is 1.
     * **learning_time_offset_hours** (*Optional*): Time constant to estimate the NOx algorithm offset from the
       history in hours. Past events will be forgotten after about twice the learning time.
       Allowed values are in range 1..1000. The default value is 12 hour.
     * **learning_time_gain_hours** (*Optional*): Here for completeness, but this is ignored by NOx Algorithm Tuning.
     * **gating_max_duration_minutes** (*Optional*): Maximum duration of gating in minutes (freeze of estimator
       during high NOx index signal). Zero disables the gating. Allowed values are in range 0..3000.
-      The default value is 180 minutes.
+      The default value is 720 minutes.
     * **std_initial** (*Optional*): Here for completeness, but this is ignored by NOx Algorithm Tuning.
     * **gain_factor** (*Optional*): Gain factor to amplify or to attenuate the NOx index output.
       Allowed values are in range 1..1000. The default value is 230. All options from [Sensor](/components/sensor#config-sensor).
@@ -194,20 +208,24 @@ sensor:
 > * The CO₂ sensor has a response time of between 60 and 70 seconds with no mention start-up time.
 > * The HCHO sensor has a start-up time of 10 minutes.
 
-# Actions
+## Automations
 
 Multiple actions are available with this component and are queued when requested. Queued actions will wait until the sensor is not busy, either from other actions or reading sensor data and the perform the requested actions. Some actions will pause sensor readings while the action is in progress. Trying to queue the same action more than once does nto make sense and the second action will be ignored.
 
-## Fan Cleaning
+### `sen6x.start_fan_cleaning` Action
 
 The sensor supports a manual fan cleaning cycle by using the
 `sen6x.start_fan_cleaning` action.
 
-### `sen6x.start_fan_cleaning` Action
-
 This [action](https://esphome.io/automations/actions/#actions) manually starts fan cleaning. During the fan cleaning
 process sensor measurements are paused or stopped, depending on the sensor, while the fan is running at
 the elevated rate. The entire fan cleaning sequence takes 12 seconds.
+
+#### Configuration Variables
+
+* **id** (*Optional*, ID): The SEN6X component to use. The action also accepts the ID directly.
+
+#### Configuration Examples
 
 ```yaml
 on_...:
@@ -228,18 +246,22 @@ interval:
       - sen6x.start_fan_cleaning: my_sen66
 ```
 
-## Humidity Sensor Heater
+### `sen6x.activate_heater` Action
 
 The SEN6X humidity sensor can develop an offset in the humidity reading when exposed to high levels of
 humidity for extended periods of time. It supports a heater similar to the one in the SHT4X. The
 difference is no automatic mode. Instead you have to trigger `sen6x.activate_heater` action occasionally.
 
-### `sen6x.activate_heater` Action
-
 This [action](https://esphome.io/automations/actions/#actions) manually starts the heater. First all measurements are
 stopped, then the heater is turned on at 200mW for 1s, finally there is a 20 second delay before
 reenabling the measurements. This is to ensure the heating effects are gone before temperature measurements
 resume. The entire activate heater sequence takes 22 seconds.
+
+#### Configuration Variables
+
+* **id** (*Optional*, ID): The SEN6X component to use. The action also accepts the ID directly.
+
+#### Configuration Examples
 
 ```yaml
 on_...:
@@ -247,7 +269,7 @@ on_...:
     - sen6x.activate_heater: my_sen66
 ```
 
-## CO₂ Calibration
+### `sen6x.perform_forced_co2_recalibration` Action
 
 The CO₂ sensor by default has auto-calibration enabled. Auto-calibration will adjust the minimum measurement
 over the last week or so to the outdoor average of slightly more than 400 ppm. Auto-calibration assumes that
@@ -259,11 +281,16 @@ take the sensor outside for 5 minutes and then force a manual CO₂ calibration 
 Be sure to watch the log output of your device when you perform this action. If the sensor reports an error
 during the recalibration process it will be reported in the log.
 
-### `sen6x.perform_forced_co2_recalibration` Action
-
 This [action](https://esphome.io/automations/actions/#actions) forces a manual calibration on the CO₂ sensor. Measurements
 are stopped before issuing the forced co2 recalibrate command to the sensor. The entire perform forced co2
 recalibration action takes 2 seconds.
+
+#### Configuration Variables
+
+* **id** (*Optional*, ID): The SEN6X component to use.
+* **value** (*Required*, templatable integer): Target CO₂ concentration in ppm.
+
+#### Configuration Examples
 
 The example below will recalibrate the CO₂ sensor when the "CO₂ Calibrate" button is pressed using the
 "CO₂ Calibration Value" number's current value.
@@ -296,21 +323,132 @@ sensor:
       name: "CO₂"
 ```
 
-## CO₂ Compensation
+### `sen6x.set_ambient_pressure` Action
 
 The CO₂ sensor supports pressure/altitude compensation to improve CO₂ accuracy. If a pressure sensor is available
 you can dynamically adjust pressure compensation by either adding `ambient_pressure_compensation_source` to your
 configuration for automatic updates or you can periodically call the `sen6x.set_ambient_pressure`
 action with the current ambient pressure. You can also statically define `altitude_compensation`.
 
-### Dynamic example with a local sensor
+This [action](https://esphome.io/automations/actions/#actions) updates the current pressure used in CO₂ pressure compensation.
+Must be in hPa or mBar. Note: Once `set_ambient_pressure` is called `altitude_compensation`, if
+set in the configuration, will be ignored. Only available with SEN63C, SEN66 or SEN69C.
+
+#### Configuration Variables
+
+* **id** (*Optional*, ID): The SEN6X component to use.
+* **value** (*Required*, templatable integer): Ambient pressure in hPa.
+
+#### Configuration Examples
 
 ```yaml
 sensor:
-  - platform: bmp581
+  - platform: bmp581_i2c
     id: bmp581_sensor
     pressure:
       id: pressure_hpa
+      unit_of_measurement: hPa
+      filters:
+        - lambda: |-
+            // convert Pa to hPa (or mBar)
+            return x * 0.01;
+      on_value:
+        then:
+          - sen6x.set_ambient_pressure:
+              id: sen66_sensor
+              value: !lambda "return x;"
+  - platform: sen6x
+    type: SEN69C
+    id: sen66_sensor
+    co2:
+      name: "CO₂"
+```
+
+### `sen6x.set_ambient_pressure_compensation` Action
+
+This deprecated action updates ambient pressure. Use `sen6x.set_ambient_pressure` instead; the old
+action is scheduled for removal in January 2027.
+
+#### Configuration Variables
+
+* **id** (*Optional*, ID): The SEN6X component to use.
+* **value** (*Required*, templatable integer): Ambient pressure in hPa.
+
+#### Configuration Examples
+
+```yaml
+on_...:
+  then:
+    - sen6x.set_ambient_pressure_compensation:
+        id: my_sen66
+        value: 1013
+```
+
+### `sen6x.set_temperature_offset` Action
+
+This [action](https://esphome.io/automations/actions/#actions) gives you access to temperature compensation slots 0-4.
+Dynamic compensation can be used when internal devices are turned on that cause additional heating.
+
+#### Configuration Variables
+
+* **id** (*Optional*, ID): The SEN6X component to use.
+* **offset** (*Optional*, templatable float): Temperature offset in °C, from -100 to 100. Defaults to `0.0`.
+* **slope** (*Optional*, templatable float): Normalized offset slope, from -3.2768 to 3.2767. Defaults to `0.0`.
+* **time_constant** (*Optional*, templatable integer): Time constant in seconds, from 0 to 65535. Defaults to `0`.
+* **slot** (*Optional*, templatable integer): Compensation slot, from 0 to 4. Defaults to `0`.
+
+#### Configuration Examples
+
+```yaml
+button:
+  - platform: template
+    name: "Set Slot 1 TC"
+    on_press:
+      - sen6x.set_temperature_offset:
+          id: sen66_sensor
+          slot: 1
+          offset: -1.2
+          slope: 0
+          time_constant: 0
+```
+
+### `sen6x.set_temperature_compensation` Action
+
+This deprecated action updates a temperature-compensation slot. Use `sen6x.set_temperature_offset`
+instead; the old action is scheduled for removal in January 2027.
+
+#### Configuration Variables
+
+* **id** (*Optional*, ID): The SEN6X component to use.
+* **offset** (*Optional*, templatable float): Temperature offset in °C, from -100 to 100. Defaults to `0.0`.
+* **normalized_offset_slope** (*Optional*, templatable float): Normalized offset slope, from -3.2768 to 3.2767. Defaults to `0.0`.
+* **time_constant** (*Optional*, templatable integer): Time constant in seconds, from 0 to 65535. Defaults to `0`.
+* **slot** (*Optional*, templatable integer): Compensation slot, from 0 to 4. Defaults to `0`.
+
+#### Configuration Examples
+
+```yaml
+on_...:
+  then:
+    - sen6x.set_temperature_compensation:
+        id: my_sen66
+        offset: -1.2
+        normalized_offset_slope: 0.1
+        time_constant: 60
+        slot: 1
+```
+
+## CO₂ Compensation
+
+The pressure source can also be configured directly:
+
+```yaml
+sensor:
+  - platform: bmp581_i2c
+    id: bmp581_sensor
+    pressure:
+      id: pressure_hpa
+      unit_of_measurement: hPa
       filters:
         - lambda: |-
             // convert Pa to hPa (or mBar)
@@ -322,34 +460,7 @@ sensor:
       ambient_pressure_compensation_source: pressure_hpa
 ```
 
-### Dynamic example `sen6x.set_ambient_pressure` Action
-
-This [action](https://esphome.io/automations/actions/#actions) updates the current pressure used in CO₂ pressure compensation.
-Must be in hPa or mBar. Note: Once `set_ambient_pressure` is called `altitude_compensation`, if
-set in the configuration, will be ignored. Only available with SEN63C, SEN66 or SEN69C.
-
-```yaml
-sensor:
-  - platform: bmp581
-    id: bmp581_sensor
-    pressure:
-      id: pressure_hpa
-      filters:
-        - lambda: |-
-            // convert Pa to hPa (or mBar)
-            return x * 0.01;
-    on_value:
-      then:
-        - lambda: !lambda |-
-            id(sen66_sensor).set_ambient_pressure(x);
-  - platform: sen6x
-    type: SEN69C
-    id: sen66_sensor
-    co2:
-      name: "CO₂"
-```
-
-### Static example with altitude
+Alternatively, configure a static altitude:
 
 ```yaml
 sensor:
@@ -376,24 +487,6 @@ offset are applied.
 
 More details about the tuning of these parameters is included in the application note:
 [SEN6x – Temperature Acceleration and Compensation Instructions](https://sensirion.com/media/documents/C964FCC8/693FD554/PS_AN_SEN6x_temperature_offset__and_Acceleration_Application_No.pdf).
-
-### `sen6x.set_temperature_offset` Action
-
-This [action](https://esphome.io/automations/actions/#actions) give you access to temperature compensation slots 0-4.
-This is a dynamic compensation that for example can be used when internal devices are turned on that cause additional heating.
-
-```yaml
-button:
-  - platform: template
-    name: "Set Slot 1 TC"
-    on_press:
-      - sen6x.set_temperature_offset:
-          id: sen66_sensor
-          slot: 1
-          offset: -1.2
-          offset: 0
-          time_constant: 0
-```
 
 ## Development with VS Code Dev Containers
 
